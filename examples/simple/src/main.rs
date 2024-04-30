@@ -2,13 +2,26 @@ use futures::{select, FutureExt};
 use futures_timer::Delay;
 use log::info;
 use matchbox_socket::{PeerState, WebRtcSocket};
-use schnorrkel::olaf::simplpedpop::{
-    round1::{self, PublicMessage},
-    round2::{self, Messages},
-    Parameters,
+use merlin::Transcript;
+use schnorrkel::olaf::{
+    errors::DKGError,
+    simplpedpop::{
+        round1::{self, PublicMessage},
+        round2::{self, Messages},
+        Parameters,
+    },
 };
 use serde::{Deserialize, Serialize};
-use std::{fs::File, io::Write, path::Path, time::Duration};
+use std::{
+    collections::BTreeSet,
+    fs::{self, File},
+    io::Write,
+    path::Path,
+    time::Duration,
+};
+
+const ROUND1_DIR_PATH: &'static str = "round1";
+const ROUND2_DIR_PATH: &'static str = "round2";
 
 #[cfg(target_arch = "wasm32")]
 fn main() {
@@ -61,14 +74,13 @@ async fn async_main() {
                         schnorrkel::olaf::simplpedpop::round1::run(parameters, rand_core::OsRng)
                             .unwrap();
 
-                    let dir_path = "round1";
-
                     // Serialize and save the public message
                     let public_message_json =
                         serde_json::to_string_pretty(&public_message).unwrap();
 
                     let mut public_message_file =
-                        File::create(Path::new(&dir_path).join("public_message.json")).unwrap();
+                        File::create(Path::new(&ROUND1_DIR_PATH).join("public_message.json"))
+                            .unwrap();
 
                     public_message_file
                         .write_all(public_message_json.as_bytes())
@@ -83,13 +95,14 @@ async fn async_main() {
                     let combined_data_json = serde_json::to_string_pretty(&combined_data).unwrap();
 
                     let mut combined_data_file =
-                        File::create(Path::new(&dir_path).join("combined_data.json")).unwrap();
+                        File::create(Path::new(&ROUND1_DIR_PATH).join("combined_data.json"))
+                            .unwrap();
 
                     combined_data_file
                         .write_all(combined_data_json.as_bytes())
                         .unwrap();
 
-                    println!("Data saved to directory {}", dir_path);
+                    println!("Data saved to directory {}", ROUND1_DIR_PATH);
 
                     let packet =
                         bincode::serialize(&ProtocolMessage::Round1Message(public_message))
@@ -118,6 +131,51 @@ async fn async_main() {
                 ProtocolMessage::Round2Message(data) => {
                     println!("Received Round 2 message with data: {:?}", data);
                     // Handle Round 2 message
+
+                    // Deserialize and read the combined private and public data
+                    let combined_data_json =
+                        fs::read_to_string(Path::new(&ROUND1_DIR_PATH).join("combined_data.json"))
+                            .unwrap();
+                    let combined_data: CombinedData =
+                        serde_json::from_str(&combined_data_json).unwrap();
+
+                    let message_json = fs::read_to_string(
+                        Path::new(&ROUND1_DIR_PATH).join("received_round1_public_messages.json"),
+                    )
+                    .unwrap();
+
+                    let message: round1::PublicMessage =
+                        serde_json::from_str(&message_json).unwrap();
+
+                    let mut messages = BTreeSet::new();
+                    messages.insert(message);
+
+                    let (public_data, messages) = round2::run(
+                        combined_data.private_data,
+                        &combined_data.public_data,
+                        messages,
+                        Transcript::new(b"label"),
+                    )
+                    .unwrap();
+
+                    // Serialize and save the public data to output directory
+                    let public_data_json = serde_json::to_string_pretty(&public_data).unwrap();
+                    let mut public_data_file =
+                        File::create(Path::new(&ROUND2_DIR_PATH).join("public_data.json")).unwrap();
+                    public_data_file
+                        .write_all(public_data_json.as_bytes())
+                        .unwrap();
+
+                    // Serialize and save the messages to output directory
+                    let messages_json = serde_json::to_string_pretty(&messages).unwrap();
+                    let mut messages_file =
+                        File::create(Path::new(&ROUND2_DIR_PATH).join("messages.json")).unwrap();
+                    messages_file.write_all(messages_json.as_bytes()).unwrap();
+
+                    println!(
+                        "Public data and messages saved to directory {}",
+                        ROUND2_DIR_PATH
+                    );
                 }
             }
         }
@@ -147,4 +205,28 @@ struct CombinedData {
 enum ProtocolMessage {
     Round1Message(PublicMessage),
     Round2Message(Messages),
+}
+
+#[derive(Debug)]
+enum MyError {
+    Io(std::io::Error),
+    Dkg(DKGError),
+}
+
+impl std::fmt::Display for MyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            MyError::Io(ref err) => write!(f, "IO error: {}", err),
+            MyError::Dkg(ref err) => write!(f, "DKG error: {}", err),
+        }
+    }
+}
+
+impl std::error::Error for MyError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match *self {
+            MyError::Io(ref err) => Some(err),
+            MyError::Dkg(ref err) => Some(err),
+        }
+    }
 }
