@@ -7,7 +7,7 @@ edition = "2021"
 matchbox_socket = { path = "../../matchbox_socket" }
 futures-timer = { version = "3", features = ["wasm-bindgen"] }
 log = { version = "0.4", default-features = false }
-schnorrkel = { git = "https://github.com/Fiono11/schnorrkel", features = [
+schnorrkel = { git = "https://github.com/Fiono11/schnorrkel", rev = "d6a18d8", features = [
     "alloc",
     "aead",
     "serde",

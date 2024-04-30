@@ -23,6 +23,8 @@ use std::{
 const ROUND1_DIR_PATH: &'static str = "round1";
 const ROUND2_DIR_PATH: &'static str = "round2";
 
+pub type MyResult<T> = Result<T, MyError>;
+
 #[cfg(target_arch = "wasm32")]
 fn main() {
     // Setup logging
@@ -34,7 +36,7 @@ fn main() {
 
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
-async fn main() {
+async fn main() -> MyResult<()> {
     // Setup logging
     use tracing_subscriber::prelude::*;
     tracing_subscriber::registry()
@@ -48,7 +50,7 @@ async fn main() {
     async_main().await
 }
 
-async fn async_main() {
+async fn async_main() -> MyResult<()> {
     // Define the role of this client instance: "pinger" or "ponger"
     let role = "pinger"; // This could also be dynamically set, e.g., from an environment variable
 
@@ -72,7 +74,7 @@ async fn async_main() {
 
                     let (private_data, public_message, public_data) =
                         schnorrkel::olaf::simplpedpop::round1::run(parameters, rand_core::OsRng)
-                            .unwrap();
+                            .map_err(MyError::Dkg)?;
 
                     // Serialize and save the public message
                     let public_message_json =
@@ -188,7 +190,8 @@ async fn async_main() {
 
             // Or break if the message loop ends (disconnected, closed, etc.)
             _ = &mut loop_fut => {
-                break;
+                //break;
+                return Ok(());
             }
         }
     }
