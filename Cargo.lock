@@ -4399,29 +4399,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "schnorrkel"
-version = "0.11.4"
-source = "git+https://github.com/Fiono11/schnorrkel#01f97b9a20f9ad4a9757cbf14799e343f95a0440"
-dependencies = [
- "aead",
- "arrayref",
- "arrayvec",
- "cfg-if",
- "chacha20poly1305",
- "curve25519-dalek",
- "derive-getters",
- "getrandom_or_panic",
- "hex",
- "merlin",
- "rand_core",
- "serde",
- "serde_bytes",
- "sha2",
- "subtle",
- "zeroize",
-]
-
-[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4640,7 +4617,7 @@ dependencies = [
  "matchbox_socket",
  "merlin",
  "rand_core",
- "schnorrkel 0.11.4 (git+https://github.com/Fiono11/schnorrkel?rev=d6a18d8)",
+ "schnorrkel",
  "serde",
  "serde_json",
  "tokio",
@@ -4661,7 +4638,7 @@ dependencies = [
  "matchbox_socket",
  "merlin",
  "rand_core",
- "schnorrkel 0.11.4 (git+https://github.com/Fiono11/schnorrkel)",
+ "schnorrkel",
  "serde",
  "serde_json",
  "tokio",

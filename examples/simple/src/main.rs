@@ -137,7 +137,7 @@ async fn async_main() -> MyResult<()> {
 
             match message {
                 ProtocolMessage::Round1Message(data) => {
-                    println!("Received Round 1 message with data: {:?}", data);
+                    println!("Received Round 1 message");
                     // Handle Round 1 message
 
                     // Deserialize and read the combined private and public data
@@ -148,13 +148,7 @@ async fn async_main() -> MyResult<()> {
                     let combined_data: CombinedData =
                         serde_json::from_str(&combined_data_json).map_err(MyError::Json)?;
 
-                    let message_json = fs::read_to_string(
-                        Path::new(&ROUND1_DIR_PATH).join("received_round1_public_messages.json"),
-                    )
-                    .map_err(MyError::Io)?;
-
-                    let message: round1::PublicMessage =
-                        serde_json::from_str(&message_json).map_err(MyError::Json)?;
+                    let message: round1::PublicMessage = data;
 
                     let mut messages = BTreeSet::new();
                     messages.insert(message);
@@ -195,9 +189,15 @@ async fn async_main() -> MyResult<()> {
                         "Public data and messages saved to directory {}",
                         ROUND2_DIR_PATH
                     );
+
+                    let packet = bincode::serialize(&ProtocolMessage::Round2Message(messages))
+                        .map_err(MyError::Bincode)?
+                        .into_boxed_slice();
+
+                    socket.send(packet.clone(), peer);
                 }
                 ProtocolMessage::Round2Message(data) => {
-                    println!("Received Round 2 message with data: {:?}", data);
+                    println!("Received Round 2 message");
                     // Handle Round 2 message
 
                     // Deserialize and read the combined private and public data
@@ -208,30 +208,31 @@ async fn async_main() -> MyResult<()> {
                     let combined_data: CombinedData =
                         serde_json::from_str(&combined_data_json).map_err(MyError::Json)?;
 
-                    // Deserialize Round 2 public messages and data
-                    let round2_public_messages_json = fs::read_to_string(
-                        Path::new(&ROUND2_DIR_PATH).join("received_round2_public_messages.json"),
-                    )
-                    .map_err(MyError::Io)?;
-
-                    let round2_public_messages = serde_json::from_str(&round2_public_messages_json)
-                        .map_err(MyError::Json)?;
-
-                    let round2_private_messages_json = fs::read_to_string(
-                        Path::new(&ROUND2_DIR_PATH).join("received_round2_private_messages.json"),
-                    )
-                    .map_err(MyError::Io)?;
-
-                    let round2_private_messages: BTreeMap<Identifier, round2::PrivateMessage> =
-                        serde_json::from_str(&round2_private_messages_json)
-                            .map_err(MyError::Json)?;
-
                     let round2_public_data_json =
                         fs::read_to_string(Path::new(&ROUND2_DIR_PATH).join("public_data.json"))
                             .map_err(MyError::Io)?;
 
                     let round2_public_data: round2::PublicData =
                         serde_json::from_str(&round2_public_data_json).map_err(MyError::Json)?;
+
+                    let identifier = round2_public_data
+                        .identifiers()
+                        .others_identifiers()
+                        .first()
+                        .unwrap();
+
+                    let mut round2_public_messages: BTreeMap<Identifier, round2::PublicMessage> =
+                        BTreeMap::new();
+
+                    round2_public_messages.insert(*identifier, data.public_message().clone());
+
+                    let mut round2_private_messages: BTreeMap<Identifier, round2::PrivateMessage> =
+                        BTreeMap::new();
+
+                    round2_private_messages.insert(
+                        *identifier,
+                        data.private_messages().first_key_value().unwrap().1.clone(),
+                    );
 
                     // Run Round 3
                     let result = round3::run(
